@@ -1,9 +1,11 @@
 require './helpers/serialization_helper.rb'
 require './helpers/customer_helper.rb'
+require './helpers/association_helper.rb'
 
 class CustomerSuccessBalancing
   include SerializationHelper
   include CustomerHelper
+  include AssociationHelper
 
   def initialize(customer_success, customers, away_customer_success)
     @customer_success = SerializationHelper.serialize_customers(customer_success)
@@ -13,17 +15,15 @@ class CustomerSuccessBalancing
 
   # Returns the ID of the customer success with most customers
   def execute
-    avaiable_customers_success = get_available_customer_success()
+    customers_sorted = CustomerHelper.sort_by_score(@customers)
+    customers_success_sorted = CustomerHelper.sort_by_score(get_available_customer_success())
 
-    customers_ordened = CustomerHelper.sort_by_score(@customers)
-    customers_success_ordened =  CustomerHelper.sort_by_score(avaiable_customers_success)
+    customers_associated = make_associations(customers_success_sorted, customers_sorted)
 
-    customers_associated = make_associations(customers_success_ordened, customers_ordened)
+    associations_by_cs = generate_grouped_associations_by_cs(customers_associated)
 
-    associations_aggrupment = generate_grouped_associations(customers_associated)
-
-    if(cs_associated_more_often?(associations_aggrupment))
-      return associations_aggrupment.first.cs_id
+    if(has_a_more_associated_cs?(associations_by_cs))
+      return associations_by_cs.first.cs_id
     end
     
     return 0
@@ -50,20 +50,22 @@ class CustomerSuccessBalancing
     return customers_associated
   end
 
-  def generate_grouped_associations(customers_associated)
-    aggrupment = CustomerHelper.group_by_cs_associated(customers_associated)
-    associations = SerializationHelper.serialize_associations(aggrupment)
-    return associations.sort { |e1,e2| e2.customers.count <=> e1.customers.count }
+  def generate_grouped_associations_by_cs(customers_associated)
+    associations_by_cs = SerializationHelper.serialize_associations(
+      CustomerHelper.group_by_cs_associated(customers_associated)
+    )
+
+    return AssociationHelper.descending_sort_by_customers_count(associations_by_cs)
   end
 
-  def cs_associated_more_often?(associations_aggrupment)
-    if associations_aggrupment.count == 1
+  def has_a_more_associated_cs?(associations_by_cs)
+    if associations_by_cs.count == 1
       return true
-    elsif associations_aggrupment.count > 1 and 
-      associations_aggrupment[0].customers.count > associations_aggrupment[1].customers.count
+    elsif associations_by_cs.count > 1 and 
+      associations_by_cs[0].customers.count > associations_by_cs[1].customers.count
       return true
     end
-
+      
     return false
   end
 end
